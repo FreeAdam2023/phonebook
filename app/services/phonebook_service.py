@@ -1,7 +1,7 @@
 import csv
-from phonebook.app.models.contact import Contacts
-from phonebook.utils.utils import error_reporter
-from phonebook.utils.logger import setup_logger  # Import the logger setup
+from app.models.contact import Contacts
+from utils.utils import error_reporter
+from utils.logger import setup_logger  # Import the logger setup
 
 # Application log
 app_logger = setup_logger('app_logger', 'logs/app.log')

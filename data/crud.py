@@ -1,7 +1,7 @@
 import traceback
-from phonebook.utils.schema_parser import get_table_schema
-from phonebook.utils.validators import validate_fields
-from phonebook.data.database import Database  # Now inheriting from this class
+from utils.schema_parser import get_table_schema
+from utils.validators import validate_fields
+from data.database import Database  # Now inheriting from this class
 import sqlite3  # Assuming you're using sqlite3
 
 class CrudOperations(Database):

@@ -1,5 +1,5 @@
-from phonebook.data.crud import CrudOperations
-from phonebook.utils.utils import error_reporter  # Import the error reporter decorator
+from data.crud import CrudOperations
+from utils.utils import error_reporter  # Import the error reporter decorator
 
 class Contacts(CrudOperations):
     def __init__(self):

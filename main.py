@@ -1,7 +1,6 @@
-import logging
-from phonebook.app.services.phonebook_service import PhoneBookService
-from phonebook.utils.utils import error_reporter
-from phonebook.utils.logger import setup_logger  # Import logger setup
+from app.services.phonebook_service import PhoneBookService
+from utils.utils import error_reporter
+from utils.logger import setup_logger
 
 # Setup loggers
 app_logger = setup_logger('app_logger', 'logs/app.log')
