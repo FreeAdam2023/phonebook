@@ -168,54 +168,8 @@ class PhoneBookService:
             else:
                 print("Invalid input, please try again.")
 
-    @error_reporter
-    def bulk_add_contacts(self, records):
-        """Bulk add contacts."""
-        for record in records:
-            record['phone'] = self._validate_and_format_phone(record['phone'])
-        self.contacts.bulk_add(records)
-        app_logger.info(f"Bulk added {len(records)} contacts.")
 
-    @error_reporter
-    def bulk_add_contacts_from_csv(self, csv_file_path):
-        """Bulk add contacts from a CSV file with detailed error reporting."""
-        records = self._parse_csv(csv_file_path)
-        if records:
-            self.bulk_add_contacts(records)
-            app_logger.info(f"Bulk added contacts from CSV file: {csv_file_path}, Total records: {len(records)}")
-        else:
-            print("No valid records found to add.")
-            app_logger.warning(f"No valid records found in CSV file: {csv_file_path}")
-
-    @error_reporter
-    def _parse_csv(self, csv_file_path):
-        """Helper method to parse CSV and validate records."""
-        records = []
-        required_fields = {'first_name', 'last_name', 'phone'}
-
-        with open(csv_file_path, newline='', encoding='utf-8') as csvfile:
-            reader = csv.DictReader(csvfile)
-
-            if not required_fields.issubset(reader.fieldnames):
-                raise ValueError(f"CSV file is missing required headers: {required_fields - set(reader.fieldnames)}")
-
-            for row in reader:
-                if not all(row[field] for field in required_fields):
-                    print(f"Skipping row with missing required data: {row}")
-                    app_logger.warning(f"Skipping invalid row in CSV: {row}")
-                    continue
-
-                records.append({
-                    'first_name': row['first_name'],
-                    'last_name': row['last_name'],
-                    'phone': row['phone'],
-                    'email': row.get('email'),
-                    'address': row.get('address')
-                })
-
-        return records
-
-    def _validate_and_format_phone(self, phone, check_duplicata=True):
+    def _validate_and_format_phone(self, phone, check_duplicata=True, reinput=True):
         """Validate, format and check for duplicate phone number."""
         while True:
             if re.match(r'^\(\d{3}\)\d{3}-\d{4}$', phone):
@@ -223,9 +177,12 @@ class PhoneBookService:
             elif re.match(r'^\d{10}$', phone):
                 pass
             else:
-                print("Invalid phone number format. Please enter in (xxx)xxx-xxxx or xxxxxxxxxx format.")
-                phone = input("Re-enter phone number: ").strip()
-                continue
+                print(f"{phone} is invalid phone number format. Please enter in (xxx)xxx-xxxx or xxxxxxxxxx format.")
+                if reinput:
+                    phone = input("Re-enter phone number: ").strip()
+                    continue
+                else:
+                    return None
 
             formatted_phone = f"({phone[:3]}){phone[3:6]}-{phone[6:]}"
 
@@ -234,40 +191,49 @@ class PhoneBookService:
                 if existing_contact:
                     print(f"Phone number {formatted_phone} already exists for the following contact:")
                     self._display_contact(existing_contact)
-                    user_choice = input(
-                        "Would you like to (1) re-enter a new phone number or (2) cancel the operation? Enter 1 or 2: ").strip()
-                    if user_choice == '1':
-                        phone = input("Re-enter phone number: ").strip()
-                        continue
-                    elif user_choice == '2':
-                        print("Operation cancelled.")
-                        return None
+                    if reinput:
+                        user_choice = input(
+                            "Would you like to (1) re-enter a new phone number or (2) cancel the operation? Enter 1 or 2: ").strip()
+                        if user_choice == '1':
+                            phone = input("Re-enter phone number: ").strip()
+                            continue
+                        elif user_choice == '2':
+                            print("Operation cancelled.")
+                            return None
+                        else:
+                            print("Invalid choice. Please enter 1 or 2.")
+                            continue
                     else:
-                        print("Invalid choice. Please enter 1 or 2.")
-                        continue
+                        return None
                 else:
                     return formatted_phone
             else:
                 return formatted_phone
 
-    def _validate_email(self, email):
+    def _validate_email(self, email, reinput=True):
         """Validate email format."""
         while email:
             if re.match(r'^\S+@\S+\.\S+$', email):
                 return email
             else:
-                print("Invalid email format. Please enter a valid email.")
-                email = input("Re-enter email (optional, press enter to skip): ").strip()
+                print(f"{email} is invalid email format. Please enter a valid email.")
+                if reinput:
+                    email = input("Re-enter email (optional, press enter to skip): ").strip()
+                else:
+                    break
         return None
 
-    def _validate_name(self, name, field_name):
+    def _validate_name(self, name, field_name, reinput=True):
         """Validate that the name is not empty and contains only letters."""
         while True:
             if name and name.isalpha():
                 return name
             else:
                 print(f"Invalid {field_name}. It must only contain letters and cannot be empty.")
-                name = input(f"Re-enter {field_name}: ").strip()
+                if reinput:
+                    name = input(f"Re-enter {field_name}: ").strip()
+                else:
+                    return None
 
     @error_reporter
     def handle_add_contact(self):
@@ -434,3 +400,152 @@ class PhoneBookService:
         else:
             print("No contacts found in the phone book.")
         print("---------------------------")
+
+    @error_reporter
+    def handle_batch_import_contacts(self):
+        """Batch import contacts from a CSV file."""
+        file_path = input("Enter the file path for batch import (CSV format): ")
+        try:
+            # Call the batch import function and get the summary
+            summary = self.bulk_add_contacts_from_csv(file_path)
+            print(f"Batch import completed: {summary['success_count']} contacts added successfully, "
+                  f"{summary['failed_count']} records failed.")
+
+            if summary['failed_records']:
+                print("\nFailed records:")
+                for failed_record in summary['failed_records']:
+                    print(f"Record: {failed_record['record']} - Error: {failed_record['error']}")
+
+            app_logger.info(f"Batch import summary: {summary}")
+        except FileNotFoundError:
+            print(f"File not found: {file_path}. Please provide a valid file.")
+            app_logger.error(f"Batch import failed: File not found '{file_path}'.")
+        except Exception as e:
+            print(f"Failed to import contacts: {e}")
+            app_logger.error(f"Batch import failed: {e}")
+        return summary
+
+    @error_reporter
+    def bulk_add_contacts_from_csv(self, csv_file_path):
+        """Bulk add contacts from a CSV file with detailed error reporting."""
+        records, failed_records = self._parse_csv(csv_file_path)
+        valid_records = []
+        success_count = 0
+
+        if records:
+            for record in records:
+                try:
+                    # Validate each record before adding
+                    first_name = self._validate_name(record['first_name'], 'first name', reinput=False)
+                    last_name = self._validate_name(record['last_name'], 'last name', reinput=False)
+                    phone = self._validate_and_format_phone(record['phone'], check_duplicata=True, reinput=False)
+                    email = self._validate_email(record.get('email'), reinput=False)
+
+                    # If all validations pass, add to valid_records
+                    if first_name and last_name and phone:
+                        record['first_name'] = first_name
+                        record['last_name'] = last_name
+                        record['phone'] = phone
+                        record['email'] = email
+                        valid_records.append(record)
+                    else:
+                        raise ValueError("Record contains invalid or missing fields.")
+
+                except ValueError as e:
+                    # Log specific error for each failed record
+                    failed_records.append({
+                        'record': record,
+                        'error': str(e)
+                    })
+                    app_logger.warning(f"Skipping invalid record: {record} - {str(e)}")
+                    continue
+
+            if valid_records:
+                # Now pass only valid records to the bulk add function
+                self.bulk_add_contacts(valid_records)
+                success_count = len(valid_records)
+                app_logger.info(f"Bulk added contacts from CSV file: {csv_file_path}, Total records: {success_count}")
+
+        return {
+            'success_count': success_count,
+            'failed_count': len(failed_records),
+            'failed_records': failed_records
+        }
+
+    @error_reporter
+    def bulk_add_contacts(self, records):
+        """Bulk add contacts with error handling and logging."""
+        success_count = 0
+        failed_records = []
+
+        for record in records:
+            try:
+                # Directly add validated records
+                self.contacts.add_contact(record)  # Assuming you have an `add_contact` method in `contacts`
+                success_count += 1
+
+            except Exception as e:
+                # Log and track any add failure
+                failed_records.append({'record': record, 'error': str(e)})
+                app_logger.warning(f"Failed to add record: {record} - {str(e)}")
+
+        # Log summary
+        app_logger.info(
+            f"Bulk add completed: {success_count} contacts successfully added, {len(failed_records)} failed.")
+
+        return {
+            'success_count': success_count,
+            'failed_count': len(failed_records),
+            'failed_records': failed_records
+        }
+
+    @error_reporter
+    def _parse_csv(self, csv_file_path):
+        """Helper method to parse CSV, validate records, and track errors."""
+        records = []
+        failed_records = []
+        required_fields = {'first_name', 'last_name', 'phone'}
+
+        with open(csv_file_path, newline='', encoding='utf-8') as csvfile:
+            reader = csv.DictReader(csvfile)
+
+            if not required_fields.issubset(reader.fieldnames):
+                raise ValueError(f"CSV file is missing required headers: {required_fields - set(reader.fieldnames)}")
+
+            for row in reader:
+                # Skip rows with missing required data
+                if not all(row[field] for field in required_fields):
+                    error_message = "Missing required data"
+                    failed_records.append({'record': row, 'error': error_message})
+                    print(f"Skipping row: {row} - {error_message}")
+                    app_logger.warning(f"Skipping invalid row in CSV: {row} - {error_message}")
+                    continue
+
+                # Validate and format the record (will be validated further in `bulk_add_contacts_from_csv`)
+                records.append({
+                    'first_name': row['first_name'].strip(),
+                    'last_name': row['last_name'].strip(),
+                    'phone': row['phone'].strip(),
+                    'email': row.get('email', '').strip(),
+                    'address': row.get('address', '').strip()
+                })
+
+        return records, failed_records
+
+    @error_reporter
+    def handle_batch_delete_contacts(self, ids_to_delete):
+        """Batch delete contacts by IDs."""
+        ids = ids_to_delete.split(',')
+
+        try:
+            # Loop through and delete each provided ID
+            for contact_id in ids:
+                contact_id = contact_id.strip()
+                if contact_id:  # Ensure no empty IDs are processed
+                    self.delete_contact(contact_id)  # Assuming delete_contact is already implemented
+            print("Batch delete completed successfully.")
+            app_logger.info(f"Batch delete for IDs {ids} completed successfully.")
+        except Exception as e:
+            print(f"Failed to delete contacts: {e}")
+            app_logger.error(f"Batch delete failed: {e}")
+
