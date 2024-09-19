@@ -74,11 +74,18 @@ def handle_update_contact(service):
     last_name = input("New last name (leave empty to skip): ").strip() or None
     email = input("New email (leave empty to skip): ").strip() or None
     address = input("New address (leave empty to skip): ").strip() or None
-    service.update_contact(phone, first_name=first_name, last_name=last_name, email=email, address=address)
+
+    # Collect all updated fields
+    updated_fields = {k: v for k, v in
+                      {'first_name': first_name, 'last_name': last_name, 'email': email, 'address': address}.items() if
+                      v}
+
+    # Call the update method
+    service.update_contact(phone, **updated_fields)
     print("Contact updated successfully.")
 
     # Log the update
-    app_logger.info(f"Updated contact: Phone: {phone}, Changes: {fields}")
+    app_logger.info(f"Updated contact: Phone: {phone}, Changes: {updated_fields}")
 
 
 @error_reporter

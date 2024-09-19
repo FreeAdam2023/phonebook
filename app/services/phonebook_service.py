@@ -45,6 +45,10 @@ class PhoneBookService:
         # Check if the phone number already exists
         existing_contact = self.contacts.find_by_phone(phone)
         if existing_contact:
+            # Display the existing contact information in a formatted way
+            print("\nDuplicate phone number found. Existing contact details:")
+            self._display_contact(existing_contact)
+
             # Ask the user whether to update the contact or re-enter phone number
             user_choice = self._prompt_user_choice()
 
@@ -69,7 +73,7 @@ class PhoneBookService:
                     "email": email,
                     "address": address
                 }
-                self.update_contact(phone, **update_data)
+                self.update_contact_by_phone(phone, **update_data)
                 app_logger.info(f"Updated existing contact: {first_name} {last_name}, Phone: {phone}")
                 print(f"Updated existing contact: {first_name} {last_name}, Phone: {phone}")
                 return
@@ -95,13 +99,14 @@ class PhoneBookService:
         self._display_contact(new_data)
 
     @error_reporter
-    def update_contact(self, phone, **fields):
+    def update_contact_by_phone(self, phone, **fields):
         """Update contact information."""
         # Validate and format the phone number if it's in the fields to be updated
         if 'phone' in fields:
             fields['phone'] = self._validate_and_format_phone(fields['phone'])
 
-        self.contacts.update(phone, **fields)
+        # Pass the phone as a dictionary for the WHERE clause
+        self.contacts.update({'phone': phone}, **fields)
 
         # Log the update action
         app_logger.info(f"Updated contact with phone: {phone}, Fields: {fields}")
@@ -112,7 +117,7 @@ class PhoneBookService:
     @error_reporter
     def delete_contact(self, phone):
         """Delete a contact."""
-        self.contacts.delete(phone)
+        self.contacts.delete(**{"phone": phone})
 
         # Log the deletion in both app and audit logs
         app_logger.info(f"Deleted contact with phone: {phone}")
@@ -204,3 +209,4 @@ class PhoneBookService:
         if contact['address']:
             print(f"Address: {contact['address']}")
         print("-" * 40)  # Separator for visual clarity
+
