@@ -56,13 +56,18 @@ class CrudOperations(Database):
     @transactional
     def bulk_add(self, records):
         if not records:
-            return
+            return 0  # Return 0 if no records are provided
+
         first_record = records[0]
         validate_fields(first_record, self.schema)
         columns = ', '.join(first_record.keys())
         placeholders = ', '.join('?' for _ in first_record)
         query = f"INSERT INTO {self.table} ({columns}, created_at) VALUES ({placeholders}, CURRENT_TIMESTAMP)"
-        self.conn.executemany(query, [tuple(record.values()) for record in records])
+
+        cursor = self.conn.executemany(query, [tuple(record.values()) for record in records])
+
+        # Return the number of rows inserted
+        return cursor.rowcount
 
     def fetch_one(self, **where):
         """

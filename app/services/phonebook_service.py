@@ -94,7 +94,7 @@ class PhoneBookService:
     def _fetch_and_display_contacts(self, search_term=None, limit=10, offset=0):
         """General method to fetch and display contacts, with optional search."""
         if search_term:
-            search_term = self._format_search_term(search_term)
+            # search_term = self._format_search_term(search_term)
             contacts = self.contacts.search_contact(search_term, limit=limit, offset=offset)
             total_contacts = self.contacts.count_contacts(search_term)  # Assuming a method to count search results
         else:
@@ -405,11 +405,17 @@ class PhoneBookService:
     def handle_batch_import_contacts(self):
         """Batch import contacts from a CSV file."""
         file_path = input("Enter the file path for batch import (CSV format): ")
+        summary = {"success_count": 0, "failed_records": [], "successful_records": []}
         try:
             # Call the batch import function and get the summary
             summary = self.bulk_add_contacts_from_csv(file_path)
             print(f"Batch import completed: {summary['success_count']} contacts added successfully, "
                   f"{summary['failed_count']} records failed.")
+
+            if summary['successful_records']:
+                print("\nSuccessfully added records:")
+                for successful_record in summary['successful_records']:
+                    print(f"Record: {successful_record}")
 
             if summary['failed_records']:
                 print("\nFailed records:")
@@ -431,6 +437,7 @@ class PhoneBookService:
         records, failed_records = self._parse_csv(csv_file_path)
         valid_records = []
         success_count = 0
+        successful_records = []
 
         if records:
             for record in records:
@@ -464,40 +471,22 @@ class PhoneBookService:
                 # Now pass only valid records to the bulk add function
                 self.bulk_add_contacts(valid_records)
                 success_count = len(valid_records)
+                successful_records = valid_records  # Collect the successful records for display
                 app_logger.info(f"Bulk added contacts from CSV file: {csv_file_path}, Total records: {success_count}")
 
         return {
             'success_count': success_count,
             'failed_count': len(failed_records),
-            'failed_records': failed_records
+            'failed_records': failed_records,
+            'successful_records': successful_records  # Return the successful records
         }
 
     @error_reporter
     def bulk_add_contacts(self, records):
         """Bulk add contacts with error handling and logging."""
-        success_count = 0
-        failed_records = []
-
-        for record in records:
-            try:
-                # Directly add validated records
-                self.contacts.add_contact(record)  # Assuming you have an `add_contact` method in `contacts`
-                success_count += 1
-
-            except Exception as e:
-                # Log and track any add failure
-                failed_records.append({'record': record, 'error': str(e)})
-                app_logger.warning(f"Failed to add record: {record} - {str(e)}")
-
-        # Log summary
+        success_count = self.contacts.bulk_add(records)
         app_logger.info(
-            f"Bulk add completed: {success_count} contacts successfully added, {len(failed_records)} failed.")
-
-        return {
-            'success_count': success_count,
-            'failed_count': len(failed_records),
-            'failed_records': failed_records
-        }
+            f"Bulk add completed: {success_count} contacts successfully added")
 
     @error_reporter
     def _parse_csv(self, csv_file_path):
@@ -533,8 +522,9 @@ class PhoneBookService:
         return records, failed_records
 
     @error_reporter
-    def handle_batch_delete_contacts(self, ids_to_delete):
+    def handle_batch_delete_contacts(self):
         """Batch delete contacts by IDs."""
+        ids_to_delete = input("Enter the IDs of contacts to delete (comma-separated): ")
         ids = ids_to_delete.split(',')
 
         try:
