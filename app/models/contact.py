@@ -49,3 +49,11 @@ class Contacts(CrudOperations):
         """
         query = f"SELECT COUNT(*) FROM {self.table}"
         return self.fetchone(query)[0]  # Use `fetchone` from `CrudOperations`
+
+    @error_reporter
+    def find_by_phone(self, phone):
+        """
+        Find a contact by phone number.
+        """
+        query = f"SELECT * FROM {self.table} WHERE phone = ?"
+        return self.fetchone(query, (phone,))  # Use `fetchone` to return a single record if found

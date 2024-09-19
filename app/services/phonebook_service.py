@@ -1,4 +1,5 @@
 import csv
+import re
 from app.models.contact import Contacts
 from utils.utils import error_reporter
 from utils.logger import setup_logger  # Import the logger setup
@@ -15,9 +16,65 @@ class PhoneBookService:
     def __init__(self):
         self.contacts = Contacts()
 
+    def _validate_and_format_phone(self, phone):
+        """Validate and format the phone number to xxx-xxx-xxxx format."""
+        phone = re.sub(r'\D', '', phone)  # Remove non-digit characters
+        if len(phone) != 10:
+            raise ValueError("Phone number must be 10 digits long.")
+        return f"{phone[:3]}-{phone[3:6]}-{phone[6:]}"
+
+    def _prompt_user_choice(self):
+        """Prompt the user for their choice on how to handle duplicate phone number."""
+        print("The phone number already exists. What would you like to do?")
+        print("1. Re-enter a new phone number")
+        print("2. Update the existing contact information")
+        choice = input("Enter 1 or 2: ").strip()
+
+        while choice not in ['1', '2']:
+            print("Invalid choice. Please enter 1 to re-enter or 2 to update.")
+            choice = input("Enter 1 or 2: ").strip()
+
+        return choice
+
     @error_reporter
     def add_contact(self, first_name, last_name, phone, email=None, address=None):
         """Add a new contact and display the result."""
+        # Validate and format the phone number
+        phone = self._validate_and_format_phone(phone)
+
+        # Check if the phone number already exists
+        existing_contact = self.contacts.find_by_phone(phone)
+        if existing_contact:
+            # Ask the user whether to update the contact or re-enter phone number
+            user_choice = self._prompt_user_choice()
+
+            if user_choice == '1':
+                # Re-enter a new phone number
+                new_phone = input("Enter a new phone number: ").strip()
+                try:
+                    new_phone = self._validate_and_format_phone(new_phone)
+                    # Ensure the new phone number is also not a duplicate
+                    if self.contacts.find_by_phone(new_phone):
+                        raise ValueError("This new phone number already exists.")
+                    phone = new_phone
+                except ValueError as e:
+                    print(e)
+                    return
+
+            elif user_choice == '2':
+                # Update the existing contact's information
+                update_data = {
+                    "first_name": first_name,
+                    "last_name": last_name,
+                    "email": email,
+                    "address": address
+                }
+                self.update_contact(phone, **update_data)
+                app_logger.info(f"Updated existing contact: {first_name} {last_name}, Phone: {phone}")
+                print(f"Updated existing contact: {first_name} {last_name}, Phone: {phone}")
+                return
+
+        # If phone is not a duplicate, proceed with adding the contact
         new_data = {
             "first_name": first_name,
             "last_name": last_name,
@@ -28,7 +85,7 @@ class PhoneBookService:
         self.contacts.add(**new_data)
 
         # Log the action in the application log
-        app_logger.info(f"Added contact: {first_name} {last_name}, Phone: {phone}")
+        app_logger.info(f"Added new contact: {first_name} {last_name}, Phone: {phone}")
 
         # Audit log for sensitive information
         audit_logger.info(f"Contact added: {first_name} {last_name} (Sensitive info logged).")
@@ -40,6 +97,10 @@ class PhoneBookService:
     @error_reporter
     def update_contact(self, phone, **fields):
         """Update contact information."""
+        # Validate and format the phone number if it's in the fields to be updated
+        if 'phone' in fields:
+            fields['phone'] = self._validate_and_format_phone(fields['phone'])
+
         self.contacts.update(phone, **fields)
 
         # Log the update action
@@ -88,6 +149,8 @@ class PhoneBookService:
     @error_reporter
     def bulk_add_contacts(self, records):
         """Bulk add contacts."""
+        for record in records:
+            record['phone'] = self._validate_and_format_phone(record['phone'])
         self.contacts.bulk_add(records)
         app_logger.info(f"Bulk added {len(records)} contacts.")
 
