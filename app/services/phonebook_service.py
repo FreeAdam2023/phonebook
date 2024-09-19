@@ -1,4 +1,5 @@
 import csv
+import os
 import re
 
 from tabulate import tabulate
@@ -447,13 +448,14 @@ class PhoneBookService:
                     last_name = self._validate_name(record['last_name'], 'last name', reinput=False)
                     phone = self._validate_and_format_phone(record['phone'], check_duplicata=True, reinput=False)
                     email = self._validate_email(record.get('email'), reinput=False)
-
+                    address = record.get('address') if record.get('address') else None
                     # If all validations pass, add to valid_records
                     if first_name and last_name and phone:
                         record['first_name'] = first_name
                         record['last_name'] = last_name
                         record['phone'] = phone
                         record['email'] = email
+                        record['address'] = address
                         valid_records.append(record)
                     else:
                         raise ValueError("Record contains invalid or missing fields.")
@@ -495,6 +497,10 @@ class PhoneBookService:
         failed_records = []
         required_fields = {'first_name', 'last_name', 'phone'}
 
+        # Check if the file path is valid and the file exists
+        if not os.path.isfile(csv_file_path):
+            raise FileNotFoundError(f"CSV file not found or invalid path: {csv_file_path}")
+
         with open(csv_file_path, newline='', encoding='utf-8') as csvfile:
             reader = csv.DictReader(csvfile)
 
@@ -528,29 +534,25 @@ class PhoneBookService:
         ids = ids_to_delete.split(',')
 
         deleted_contacts = []
+        # Loop through and delete each provided ID
+        for contact_id in ids:
+            contact_id = contact_id.strip()
+            if contact_id:  # Ensure no empty IDs are processed
+                contact = self.contacts.fetch_one(**{'id': contact_id})  # Fetch contact before deletion
+                if contact:
+                    deleted_contacts.append(contact)
+                    self.contacts.delete(**{'id': contact_id})  # Perform deletion
 
-        try:
-            # Loop through and delete each provided ID
-            for contact_id in ids:
-                contact_id = contact_id.strip()
-                if contact_id:  # Ensure no empty IDs are processed
-                    contact = self.contacts.fetch_one(**{'id': contact_id})  # Fetch contact before deletion
-                    if contact:
-                        deleted_contacts.append(contact)
-                        self.contacts.delete(**{'id': contact_id})  # Perform deletion
+        if deleted_contacts:
+            print("Deleted contacts:")
+            for contact in deleted_contacts:
+                print(
+                    f"ID: {contact['id']}, Name: {contact['first_name']} {contact['last_name']}, Phone: {contact['phone']}")
+            app_logger.info(f"Deleted contacts: {deleted_contacts}")
+        else:
+            print("No contacts were found for the given IDs.")
 
-            if deleted_contacts:
-                print("Deleted contacts:")
-                for contact in deleted_contacts:
-                    print(
-                        f"ID: {contact['id']}, Name: {contact['first_name']} {contact['last_name']}, Phone: {contact['phone']}")
-                app_logger.info(f"Deleted contacts: {deleted_contacts}")
-            else:
-                print("No contacts were found for the given IDs.")
+        print("Batch delete completed successfully.")
 
-            print("Batch delete completed successfully.")
-        except Exception as e:
-            print(f"Failed to delete contacts: {e}")
-            app_logger.error(f"Batch delete failed: {e}")
 
 
