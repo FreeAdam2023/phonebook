@@ -91,32 +91,82 @@ class PhoneBookService:
         audit_logger.info(f"Deleted contact with phone: {phone} (Sensitive data removed).")
 
     @error_reporter
-    def search_contact(self, search_term):
-        """Search contacts by name or phone number."""
-        results = self.contacts.search_contact(search_term)
-        if results:
-            print("\nSearch Results:")
-            for contact in results:
-                self._display_contact(contact)
-            app_logger.info(f"Search results for: {search_term}, Found {len(results)} contacts.")
+    def _fetch_and_display_contacts(self, search_term=None, limit=10, offset=0):
+        """General method to fetch and display contacts, with optional search."""
+        if search_term:
+            search_term = self._format_search_term(search_term)
+            contacts = self.contacts.search_contact(search_term, limit=limit, offset=offset)
+            total_contacts = self.contacts.count_contacts(search_term)  # Assuming a method to count search results
         else:
-            print(f"No contacts found for search term: {search_term}")
-            app_logger.info(f"No search results found for: {search_term}")
-        return results
+            contacts = self.contacts.get_all_contacts(limit=limit, offset=offset)
+            total_contacts = self.contacts.count_contacts()
+
+        if not contacts:
+            print(f"No contacts found{' for search term: ' + search_term if search_term else '.'}")
+            return
+
+        self._display_contacts_as_table(contacts, total_contacts, limit)
 
     @error_reporter
-    def get_all_contacts(self, limit=10, offset=0):
-        """Get all contacts with pagination support and display them."""
-        contacts = self.contacts.get_all_contacts(limit=limit, offset=offset)
-        if contacts:
-            print("\nAll contacts:")
-            for contact in contacts:
-                self._display_contact(contact)
-            app_logger.info(f"Displayed {len(contacts)} contacts (limit={limit}, offset={offset}).")
-        else:
-            print("No contacts found.")
-            app_logger.info("No contacts found.")
-        return contacts
+    def handle_view_contacts(self):
+        """Handle viewing all contacts with pagination."""
+        self._fetch_and_display_contacts()
+
+    @error_reporter
+    def handle_search_contact(self):
+        """Handle searching for a contact by name or phone number with pagination."""
+        search_term = input("Enter search term (name or phone): ").strip()
+        self._fetch_and_display_contacts(search_term)
+
+    @error_reporter
+    def _format_search_term(self, search_term):
+        """Format a phone number prefix to (xxx)xxx-xxxx format for partial searches."""
+        if search_term.isdigit() or re.match(r'^\(\d{3}\)\d{3}-\d{4}$', search_term):
+            search_term = re.sub(r'\D', '', search_term)
+            if len(search_term) <= 3:
+                return f"({search_term})"
+            elif len(search_term) <= 6:
+                return f"({search_term[:3]}){search_term[3:]}"
+            else:
+                return f"({search_term[:3]}){search_term[3:6]}-{search_term[6:]}"
+        return search_term
+
+    @error_reporter
+    def _display_contacts_as_table(self, contacts, total_contacts, limit=10):
+        """Helper method to display contacts in a table format using tabulate, with optional pagination."""
+        total_pages = (total_contacts + limit - 1) // limit
+        offset = 0
+        current_page = 1
+
+        while True:
+            table_data = []
+            headers = ["#", "First Name", "Last Name", "Phone", "Email", "Address"]
+
+            for contact in contacts[offset:offset + limit]:
+                table_data.append([
+                    contact['id'] if 'id' in contact else 'N/A',
+                    contact['first_name'] if 'first_name' in contact else 'N/A',
+                    contact['last_name'] if 'last_name' in contact else 'N/A',
+                    contact['phone'] if 'phone' in contact else 'N/A',
+                    contact['email'] if 'email' in contact else 'N/A',
+                    contact['address'] if 'address' in contact else 'N/A'
+                ])
+
+            print(tabulate(table_data, headers=headers, tablefmt="grid"))
+            print(f"\nShowing page {current_page} of {total_pages}")
+
+            next_action = input("Press 'n' for next page, 'p' for previous page, or 'q' to quit: ").strip().lower()
+
+            if next_action == 'n' and current_page < total_pages:
+                offset += limit
+                current_page += 1
+            elif next_action == 'p' and current_page > 1:
+                offset -= limit
+                current_page -= 1
+            elif next_action == 'q':
+                break
+            else:
+                print("Invalid input, please try again.")
 
     @error_reporter
     def bulk_add_contacts(self, records):
@@ -146,12 +196,10 @@ class PhoneBookService:
         with open(csv_file_path, newline='', encoding='utf-8') as csvfile:
             reader = csv.DictReader(csvfile)
 
-            # Validate CSV headers
             if not required_fields.issubset(reader.fieldnames):
                 raise ValueError(f"CSV file is missing required headers: {required_fields - set(reader.fieldnames)}")
 
             for row in reader:
-                # Ensure required fields are present in each row
                 if not all(row[field] for field in required_fields):
                     print(f"Skipping row with missing required data: {row}")
                     app_logger.warning(f"Skipping invalid row in CSV: {row}")
@@ -167,10 +215,9 @@ class PhoneBookService:
 
         return records
 
-    def _validate_and_format_phone(self, phone):
+    def _validate_and_format_phone(self, phone, check_duplicata=True):
         """Validate, format and check for duplicate phone number."""
         while True:
-            # Check phone format
             if re.match(r'^\(\d{3}\)\d{3}-\d{4}$', phone):
                 phone = re.sub(r'[^\d]', '', phone)
             elif re.match(r'^\d{10}$', phone):
@@ -180,28 +227,27 @@ class PhoneBookService:
                 phone = input("Re-enter phone number: ").strip()
                 continue
 
-            # Format to (xxx)xxx-xxxx
             formatted_phone = f"({phone[:3]}){phone[3:6]}-{phone[6:]}"
 
-            # Check if the phone number already exists
-            existing_contact = self.contacts.find_by_phone(formatted_phone)
-            if existing_contact:
-                print(f"Phone number {formatted_phone} already exists for the following contact:")
-                self._display_contact(existing_contact)
-
-                # Offer user a choice to re-enter or cancel
-                user_choice = input("Would you like to (1) re-enter a new phone number or (2) cancel the operation? Enter 1 or 2: ").strip()
-                if user_choice == '1':
-                    phone = input("Re-enter phone number: ").strip()
-                    continue  # Retry input if user chooses to re-enter
-                elif user_choice == '2':
-                    print("Operation cancelled.")
-                    return None  # Abort the process
+            if check_duplicata:
+                existing_contact = self.contacts.find_by_phone(formatted_phone)
+                if existing_contact:
+                    print(f"Phone number {formatted_phone} already exists for the following contact:")
+                    self._display_contact(existing_contact)
+                    user_choice = input(
+                        "Would you like to (1) re-enter a new phone number or (2) cancel the operation? Enter 1 or 2: ").strip()
+                    if user_choice == '1':
+                        phone = input("Re-enter phone number: ").strip()
+                        continue
+                    elif user_choice == '2':
+                        print("Operation cancelled.")
+                        return None
+                    else:
+                        print("Invalid choice. Please enter 1 or 2.")
+                        continue
                 else:
-                    print("Invalid choice. Please enter 1 or 2.")
-                    continue
+                    return formatted_phone
             else:
-                # If phone is valid and not a duplicate, return formatted phone
                 return formatted_phone
 
     def _validate_email(self, email):
@@ -249,76 +295,6 @@ class PhoneBookService:
         print("Contact added successfully.")
 
     @error_reporter
-    def handle_view_contacts(self):
-        """Handle viewing all contacts with pagination, showing record total, current page, and total pages."""
-        limit = 10  # Number of records per page
-        offset = 0
-        total_contacts = self.contacts.count_contacts()  # Get total number of contacts
-        total_pages = (total_contacts + limit - 1) // limit  # Calculate total pages (rounded up)
-
-        if total_contacts == 0:
-            print("No contacts found.")
-            return
-
-        current_page = 1
-        while True:
-            print(f"\n--- Page {current_page}/{total_pages} ---")
-            print(f"Total Contacts: {total_contacts}")
-            contacts = self.contacts.get_all_contacts(limit=limit, offset=offset)
-
-            # Prepare data for tabulate, including empty fields
-            table_data = []
-            headers = ["#", "First Name", "Last Name", "Phone", "Email", "Address"]
-
-            for contact in contacts:
-                table_data.append([
-                    contact.get('id', 'N/A'),
-                    contact.get('first_name', 'N/A'),
-                    contact.get('last_name', 'N/A'),
-                    contact.get('phone', 'N/A'),
-                    contact.get('email', 'N/A'),
-                    contact.get('address', 'N/A')
-                ])
-
-            # Display the table
-            print(tabulate(table_data, headers=headers, tablefmt="grid"))
-
-            print(f"\nShowing page {current_page} of {total_pages}")
-
-            next_action = input("Press 'n' for next page, 'p' for previous page, or 'q' to quit: ").strip().lower()
-
-            if next_action == 'n':
-                if current_page < total_pages:
-                    offset += limit
-                    current_page += 1
-                else:
-                    print("You are on the last page.")
-            elif next_action == 'p':
-                if current_page > 1:
-                    offset -= limit
-                    current_page -= 1
-                else:
-                    print("You are on the first page.")
-            elif next_action == 'q':
-                break
-            else:
-                print("Invalid input, please try again.")
-
-    @error_reporter
-    def handle_search_contact(self):
-        """Handle searching for a contact by name or phone number."""
-        search_term = input("Enter search term (name or phone): ").strip()
-
-        results = self.search_contact(search_term)
-        if results:
-            for contact in results:
-                print(f"{contact['id']}. {contact['first_name']} {contact['last_name']}, Phone: {contact['phone']}")
-            app_logger.info(f"Search results for: {search_term}, Found {len(results)} contacts.")
-        else:
-            print("No matching contacts found.")
-            app_logger.info(f"No contacts found for search term: {search_term}")
-
-    @error_reporter
     def handle_delete_contact(self):
         """Handle deleting a contact by phone number or contact ID."""
         print("Delete Contact: You can delete by phone number or contact ID (number).")
@@ -358,43 +334,89 @@ class PhoneBookService:
         print("Update Contact: You can update by phone number or contact ID (number).")
         update_choice = input("Would you like to update by (1) Phone number or (2) Contact ID? Enter 1 or 2: ").strip()
 
+        existing_contact = None
+
         if update_choice == '1':
             # Update by phone number
             phone = input("Enter phone number of the contact to update: ").strip()
+            phone = self._validate_and_format_phone(phone, check_duplicata=False)
             if not phone:
                 print("Phone number is required to update contact.")
                 return
+
+            # Fetch existing contact by phone before updating
+            existing_contact = self.contacts.find_by_phone(phone)
+            if not existing_contact:
+                print(f"No contact found with phone: {phone}")
+                return
         elif update_choice == '2':
-            # Update by ID
+            # Update by contact ID
             try:
                 contact_id = int(input("Enter the contact ID to update: ").strip())
             except ValueError:
                 print("Invalid contact ID. Please enter a valid number.")
                 return
+
+            # Fetch existing contact by ID before updating
+            existing_contact = self.contacts.fetch_one(id=contact_id)
+            if not existing_contact:
+                print(f"No contact found with ID: {contact_id}")
+                return
         else:
             print("Invalid option. Please enter 1 or 2.")
             return
 
-        # Collect new details from the user
-        first_name = input("New first name (leave empty to skip): ").strip() or None
-        last_name = input("New last name (leave empty to skip): ").strip() or None
-        email = input("New email (leave empty to skip): ").strip() or None
+        # Display current contact information before update
+        print("\n--- Current Contact Information ---")
+        self._display_contact(existing_contact)
+
+        # Collect new details from the user with validation
+        first_name = self._validate_name(input("New first name (leave empty to skip): ").strip(), "first name") or None
+        last_name = self._validate_name(input("New last name (leave empty to skip): ").strip(), "last name") or None
+        email = self._validate_email(input("New email (leave empty to skip): ").strip()) or None
         address = input("New address (leave empty to skip): ").strip() or None
 
         # Collect all updated fields
         updated_fields = {k: v for k, v in
-                          {'first_name': first_name, 'last_name': last_name, 'email': email, 'address': address}.items() if v}
+                          {'first_name': first_name, 'last_name': last_name, 'email': email, 'address': address}.items()
+                          if v}
 
+        if not updated_fields:
+            print("No valid fields to update.")
+            return
+
+        # Perform the update
         if update_choice == '1':
-            # Call the update method by phone number
+            # Update by phone number
             self.contacts.update_contact_by_phone(phone, **updated_fields)
             print(f"Contact with phone {phone} updated successfully.")
             app_logger.info(f"Updated contact with phone: {phone}, Changes: {updated_fields}")
         elif update_choice == '2':
-            # Call the update method by contact ID
+            # Update by contact ID
             self.contacts.update_contact_by_id(contact_id, **updated_fields)
             print(f"Contact with ID {contact_id} updated successfully.")
             app_logger.info(f"Updated contact with ID: {contact_id}, Changes: {updated_fields}")
+
+        # Fetch updated contact information
+        updated_contact = self.contacts.find_by_phone(phone) if update_choice == '1' else self.contacts.fetch_one(
+            id=contact_id)
+
+        # Display updated contact information after update
+        print("\n--- Updated Contact Information ---")
+        self._display_contact(updated_contact)
+
+        # Compare and display the differences between old and new contact information
+        print("\n--- Changes ---")
+        self._display_changes(existing_contact, updated_contact)
+
+    def _display_changes(self, old_contact, new_contact):
+        """Helper to display the differences between old and new contact."""
+        fields = ['first_name', 'last_name', 'email', 'address']
+        for field in fields:
+            old_value = old_contact[field]
+            new_value = new_contact[field]
+            if old_value != new_value:
+                print(f"{field.capitalize()}: '{old_value}' -> '{new_value}'")
 
     @error_reporter
     def display_summary(self):

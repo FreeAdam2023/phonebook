@@ -71,8 +71,7 @@ class CrudOperations(Database):
         """
         where_clause = ' AND '.join(f"{k} = ?" for k in where)
         query = f"SELECT * FROM {self.table} WHERE {where_clause} LIMIT 1"
-        row = self.fetchone(query, tuple(where.values()))
-        return dict(row) if row else None  # Return the row as a dictionary
+        return self.fetchone(query, tuple(where.values()))
 
     def fetch_all(self, limit=10, offset=0, **where):
         """
@@ -93,5 +92,4 @@ class CrudOperations(Database):
             query = f"SELECT * FROM {self.table} LIMIT ? OFFSET ?"
             params = (limit, offset)
 
-        rows = self.fetchall(query, params)
-        return [dict(row) for row in rows] if rows else []  # Return list of dictionaries
+        return self.fetchall(query, params)

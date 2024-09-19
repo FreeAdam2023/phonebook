@@ -26,14 +26,17 @@ class Contacts(CrudOperations):
         self.execute(query)  # Use `execute` directly since `Contacts` inherits from `CrudOperations`
 
     @error_reporter
-    def search_contact(self, search_term):
+    def search_contact(self, search_term, limit=10, offset=0):
         """
-        Search contacts by first name, last name, or phone number.
+        Search contacts by first name, last name, or phone number with pagination.
         """
         where_clause = "first_name LIKE ? OR last_name LIKE ? OR phone LIKE ?"
         search_value = f"%{search_term}%"
-        query = f"SELECT * FROM {self.table} WHERE {where_clause}"
-        return self.fetchall(query, (search_value, search_value, search_value))  # Use `fetchall` from `CrudOperations`
+        query = f"SELECT * FROM {self.table} WHERE {where_clause} LIMIT ? OFFSET ?"
+
+        # Add pagination parameters (limit, offset) to the query
+        return self.fetchall(query, (
+        search_value, search_value, search_value, limit, offset))  # Use `fetchall` from `CrudOperations`
 
     @error_reporter
     def get_all_contacts(self, limit=10, offset=0):
@@ -43,12 +46,22 @@ class Contacts(CrudOperations):
         return self.fetch_all(limit=limit, offset=offset)  # Use `fetch_all` method from `CrudOperations`
 
     @error_reporter
-    def count_contacts(self):
+    def count_contacts(self, search_term=None):
         """
-        Count the total number of contacts in the table.
+        Count the total number of contacts in the table, optionally filtered by a search term.
+        If a search term is provided, it counts the number of contacts matching the term by first name, last name, or phone.
         """
-        query = f"SELECT COUNT(*) FROM {self.table}"
-        return self.fetchone(query)[0]  # Use `fetchone` from `CrudOperations`
+        if search_term:
+            where_clause = "first_name LIKE ? OR last_name LIKE ? OR phone LIKE ?"
+            search_value = f"%{search_term}%"
+            query = f"SELECT COUNT(*) as count FROM {self.table} WHERE {where_clause}"
+            rsp = self.fetchone(query, (search_value, search_value, search_value))
+            return rsp['count'] if rsp else 0
+        else:
+            query = f"SELECT COUNT(*) as count FROM {self.table}"
+            rsp = self.fetchone(query)
+            return rsp['count'] if rsp else 0
+
 
     @error_reporter
     def find_by_phone(self, phone):

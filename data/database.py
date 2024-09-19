@@ -24,7 +24,7 @@ class Database:
             params = ()
         cursor = self.conn.execute(query, params)
         results = cursor.fetchall()
-        return results
+        return [dict(row) for row in results]
 
     def fetchone(self, query, params=None):
         self.connect()
@@ -32,7 +32,7 @@ class Database:
             params = ()
         cursor = self.conn.execute(query, params)
         result = cursor.fetchone()
-        return result
+        return dict(result) if result else None
 
     def close(self):
         if self.conn:
