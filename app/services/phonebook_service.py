@@ -523,19 +523,34 @@ class PhoneBookService:
 
     @error_reporter
     def handle_batch_delete_contacts(self):
-        """Batch delete contacts by IDs."""
+        """Batch delete contacts by IDs and display the deleted records."""
         ids_to_delete = input("Enter the IDs of contacts to delete (comma-separated): ")
         ids = ids_to_delete.split(',')
+
+        deleted_contacts = []
 
         try:
             # Loop through and delete each provided ID
             for contact_id in ids:
                 contact_id = contact_id.strip()
                 if contact_id:  # Ensure no empty IDs are processed
-                    self.delete_contact(contact_id)  # Assuming delete_contact is already implemented
+                    contact = self.contacts.fetch_one(**{'id': contact_id})  # Fetch contact before deletion
+                    if contact:
+                        deleted_contacts.append(contact)
+                        self.contacts.delete(**{'id': contact_id})  # Perform deletion
+
+            if deleted_contacts:
+                print("Deleted contacts:")
+                for contact in deleted_contacts:
+                    print(
+                        f"ID: {contact['id']}, Name: {contact['first_name']} {contact['last_name']}, Phone: {contact['phone']}")
+                app_logger.info(f"Deleted contacts: {deleted_contacts}")
+            else:
+                print("No contacts were found for the given IDs.")
+
             print("Batch delete completed successfully.")
-            app_logger.info(f"Batch delete for IDs {ids} completed successfully.")
         except Exception as e:
             print(f"Failed to delete contacts: {e}")
             app_logger.error(f"Batch delete failed: {e}")
+
 
