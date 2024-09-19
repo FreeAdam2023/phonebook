@@ -19,13 +19,6 @@ class PhoneBookService:
     def __init__(self):
         self.contacts = Contacts()
 
-    def _validate_and_format_phone(self, phone):
-        """Validate and format the phone number to xxx-xxx-xxxx format."""
-        phone = re.sub(r'\D', '', phone)  # Remove non-digit characters
-        if len(phone) != 10:
-            raise ValueError("Phone number must be 10 digits long.")
-        return f"{phone[:3]}-{phone[3:6]}-{phone[6:]}"
-
     def _prompt_user_choice(self):
         """Prompt the user for their choice on how to handle duplicate phone number."""
         print("The phone number already exists. What would you like to do?")
@@ -42,46 +35,7 @@ class PhoneBookService:
     @error_reporter
     def add_contact(self, first_name, last_name, phone, email=None, address=None):
         """Add a new contact and display the result."""
-        # Validate and format the phone number
-        phone = self._validate_and_format_phone(phone)
-
-        # Check if the phone number already exists
-        existing_contact = self.contacts.find_by_phone(phone)
-        if existing_contact:
-            # Display the existing contact information in a formatted way
-            print("\nDuplicate phone number found. Existing contact details:")
-            self._display_contact(existing_contact)
-
-            # Ask the user whether to update the contact or re-enter phone number
-            user_choice = self._prompt_user_choice()
-
-            if user_choice == '1':
-                # Re-enter a new phone number
-                new_phone = input("Enter a new phone number: ").strip()
-                try:
-                    new_phone = self._validate_and_format_phone(new_phone)
-                    # Ensure the new phone number is also not a duplicate
-                    if self.contacts.find_by_phone(new_phone):
-                        raise ValueError("This new phone number already exists.")
-                    phone = new_phone
-                except ValueError as e:
-                    print(e)
-                    return
-
-            elif user_choice == '2':
-                # Update the existing contact's information
-                update_data = {
-                    "first_name": first_name,
-                    "last_name": last_name,
-                    "email": email,
-                    "address": address
-                }
-                self.update_contact_by_phone(phone, **update_data)
-                app_logger.info(f"Updated existing contact: {first_name} {last_name}, Phone: {phone}")
-                print(f"Updated existing contact: {first_name} {last_name}, Phone: {phone}")
-                return
-
-        # If phone is not a duplicate, proceed with adding the contact
+        # Construct new contact data
         new_data = {
             "first_name": first_name,
             "last_name": last_name,
@@ -89,17 +43,27 @@ class PhoneBookService:
             "email": email,
             "address": address
         }
+
+        # Add the contact
         self.contacts.add(**new_data)
 
-        # Log the action in the application log
+        # Log the action
         app_logger.info(f"Added new contact: {first_name} {last_name}, Phone: {phone}")
-
-        # Audit log for sensitive information
         audit_logger.info(f"Contact added: {first_name} {last_name} (Sensitive info logged).")
 
         # Display the newly added contact
         print("\nNew contact added successfully:")
         self._display_contact(new_data)
+
+    def _display_contact(self, contact):
+        """Helper to format and display a single contact."""
+        print(f"Name: {contact['first_name']} {contact['last_name']}")
+        print(f"Phone: {contact['phone']}")
+        if 'email' in contact and contact['email']:
+            print(f"Email: {contact['email']}")
+        if 'address' in contact and contact['address']:
+            print(f"Address: {contact['address']}")
+        print("-" * 40)  # Separator for visual clarity
 
     @error_reporter
     def update_contact_by_phone(self, phone, **fields):
@@ -203,28 +167,86 @@ class PhoneBookService:
 
         return records
 
-    def _display_contact(self, contact):
-        """Helper to format and display a single contact."""
-        print(f"Name: {contact['first_name']} {contact['last_name']}")
-        print(f"Phone: {contact['phone']}")
-        if contact['email']:
-            print(f"Email: {contact['email']}")
-        if contact['address']:
-            print(f"Address: {contact['address']}")
-        print("-" * 40)  # Separator for visual clarity
+    def _validate_and_format_phone(self, phone):
+        """Validate, format and check for duplicate phone number."""
+        while True:
+            # Check phone format
+            if re.match(r'^\(\d{3}\)\d{3}-\d{4}$', phone):
+                phone = re.sub(r'[^\d]', '', phone)
+            elif re.match(r'^\d{10}$', phone):
+                pass
+            else:
+                print("Invalid phone number format. Please enter in (xxx)xxx-xxxx or xxxxxxxxxx format.")
+                phone = input("Re-enter phone number: ").strip()
+                continue
+
+            # Format to (xxx)xxx-xxxx
+            formatted_phone = f"({phone[:3]}){phone[3:6]}-{phone[6:]}"
+
+            # Check if the phone number already exists
+            existing_contact = self.contacts.find_by_phone(formatted_phone)
+            if existing_contact:
+                print(f"Phone number {formatted_phone} already exists for the following contact:")
+                self._display_contact(existing_contact)
+
+                # Offer user a choice to re-enter or cancel
+                user_choice = input("Would you like to (1) re-enter a new phone number or (2) cancel the operation? Enter 1 or 2: ").strip()
+                if user_choice == '1':
+                    phone = input("Re-enter phone number: ").strip()
+                    continue  # Retry input if user chooses to re-enter
+                elif user_choice == '2':
+                    print("Operation cancelled.")
+                    return None  # Abort the process
+                else:
+                    print("Invalid choice. Please enter 1 or 2.")
+                    continue
+            else:
+                # If phone is valid and not a duplicate, return formatted phone
+                return formatted_phone
+
+    def _validate_email(self, email):
+        """Validate email format."""
+        while email:
+            if re.match(r'^\S+@\S+\.\S+$', email):
+                return email
+            else:
+                print("Invalid email format. Please enter a valid email.")
+                email = input("Re-enter email (optional, press enter to skip): ").strip()
+        return None
+
+    def _validate_name(self, name, field_name):
+        """Validate that the name is not empty and contains only letters."""
+        while True:
+            if name and name.isalpha():
+                return name
+            else:
+                print(f"Invalid {field_name}. It must only contain letters and cannot be empty.")
+                name = input(f"Re-enter {field_name}: ").strip()
 
     @error_reporter
     def handle_add_contact(self):
-        """Handle adding a new contact."""
-        first_name = input("First name: ").strip()
-        last_name = input("Last name: ").strip()
-        phone = input("Phone number: ").strip()
-        email = input("Email (optional): ").strip() or None
+        """Handle adding a new contact with field validation at input time."""
+        # Validate first name
+        first_name = self._validate_name(input("First name: ").strip(), "first name")
+
+        # Validate last name
+        last_name = self._validate_name(input("Last name: ").strip(), "last name")
+
+        # Validate phone number and check for duplicates
+        phone = self._validate_and_format_phone(input("Phone number: ").strip())
+        if phone is None:
+            print("Contact addition cancelled.")
+            return  # If the user cancels, stop the process
+
+        # Validate email (optional)
+        email = self._validate_email(input("Email (optional, press enter to skip): ").strip())
+
+        # Validate address (optional, no format needed, can be empty)
         address = input("Address (optional): ").strip() or None
+
+        # Add contact
         self.add_contact(first_name, last_name, phone, email, address)
         print("Contact added successfully.")
-        # Log the addition of the contact
-        app_logger.info(f"Added contact: {first_name} {last_name}, Phone: {phone}")
 
     @error_reporter
     def handle_view_contacts(self):
@@ -242,7 +264,7 @@ class PhoneBookService:
         while True:
             print(f"\n--- Page {current_page}/{total_pages} ---")
             print(f"Total Contacts: {total_contacts}")
-            contacts = self.get_all_contacts(limit=limit, offset=offset)
+            contacts = self.contacts.get_all_contacts(limit=limit, offset=offset)
 
             # Prepare data for tabulate, including empty fields
             table_data = []
@@ -286,6 +308,7 @@ class PhoneBookService:
     def handle_search_contact(self):
         """Handle searching for a contact by name or phone number."""
         search_term = input("Enter search term (name or phone): ").strip()
+
         results = self.search_contact(search_term)
         if results:
             for contact in results:
