@@ -1,5 +1,8 @@
 import csv
 import re
+
+from tabulate import tabulate
+
 from app.models.contact import Contacts
 from utils.utils import error_reporter
 from utils.logger import setup_logger  # Import the logger setup
@@ -210,3 +213,157 @@ class PhoneBookService:
             print(f"Address: {contact['address']}")
         print("-" * 40)  # Separator for visual clarity
 
+    @error_reporter
+    def handle_add_contact(self, service):
+        """Handle adding a new contact."""
+        first_name = input("First name: ").strip()
+        last_name = input("Last name: ").strip()
+        phone = input("Phone number: ").strip()
+        email = input("Email (optional): ").strip() or None
+        address = input("Address (optional): ").strip() or None
+        service.add_contact(first_name, last_name, phone, email, address)
+        print("Contact added successfully.")
+
+        # Log the addition of the contact
+        app_logger.info(f"Added contact: {first_name} {last_name}, Phone: {phone}")
+
+    @error_reporter
+    def handle_view_contacts(self):
+        """Handle viewing all contacts with pagination, showing record total, current page, and total pages."""
+        limit = 10  # Number of records per page
+        offset = 0
+        total_contacts = self.contacts.count_contacts()  # Get total number of contacts
+        total_pages = (total_contacts + limit - 1) // limit  # Calculate total pages (rounded up)
+
+        if total_contacts == 0:
+            print("No contacts found.")
+            return
+
+        current_page = 1
+        while True:
+            print(f"\n--- Page {current_page}/{total_pages} ---")
+            print(f"Total Contacts: {total_contacts}")
+            contacts = self.get_all_contacts(limit=limit, offset=offset)
+
+            # Prepare data for tabulate, including empty fields
+            table_data = []
+            headers = ["#", "First Name", "Last Name", "Phone", "Email", "Address"]
+
+            for idx, contact in enumerate(contacts, start=1 + offset):
+                table_data.append([
+                    idx,
+                    contact.get('first_name', 'N/A'),
+                    contact.get('last_name', 'N/A'),
+                    contact.get('phone', 'N/A'),
+                    contact.get('email', 'N/A'),
+                    contact.get('address', 'N/A')
+                ])
+
+            # Display the table
+            print(tabulate(table_data, headers=headers, tablefmt="grid"))
+
+            print(f"\nShowing page {current_page} of {total_pages}")
+
+            next_action = input("Press 'n' for next page, 'p' for previous page, or 'q' to quit: ").strip().lower()
+
+            if next_action == 'n':
+                if current_page < total_pages:
+                    offset += limit
+                    current_page += 1
+                else:
+                    print("You are on the last page.")
+            elif next_action == 'p':
+                if current_page > 1:
+                    offset -= limit
+                    current_page -= 1
+                else:
+                    print("You are on the first page.")
+            elif next_action == 'q':
+                break
+            else:
+                print("Invalid input, please try again.")
+
+    @error_reporter
+    def handle_search_contact(self):
+        """Handle searching for a contact by name or phone number."""
+        search_term = input("Enter search term (name or phone): ").strip()
+        results = self.search_contact(search_term)
+        if results:
+            for idx, contact in enumerate(results, start=1):
+                print(f"{idx}. {contact['first_name']} {contact['last_name']}, Phone: {contact['phone']}")
+            app_logger.info(f"Search results for: {search_term}, Found {len(results)} contacts.")
+        else:
+            print("No matching contacts found.")
+            app_logger.info(f"No contacts found for search term: {search_term}")
+
+    @error_reporter
+    def handle_delete_contact(self):
+        """Handle deleting a contact by phone number."""
+        phone = input("Enter phone number of the contact to delete: ").strip()
+        self.delete_contact(phone)
+        print("Contact deleted successfully.")
+
+        # Log the deletion
+        app_logger.info(f"Deleted contact with phone: {phone}")
+
+
+    @error_reporter
+    def handle_update_contact(self):
+        """Handle updating a contact's information."""
+        print("Update Contact: You can update by phone number or contact ID (number).")
+        update_choice = input("Would you like to update by (1) Phone number or (2) Contact ID? Enter 1 or 2: ").strip()
+
+        if update_choice == '1':
+            # Update by phone number
+            phone = input("Enter phone number of the contact to update: ").strip()
+            if not phone:
+                print("Phone number is required to update contact.")
+                return
+        elif update_choice == '2':
+            # Update by ID
+            try:
+                contact_id = int(input("Enter the contact ID to update: ").strip())
+            except ValueError:
+                print("Invalid contact ID. Please enter a valid number.")
+                return
+        else:
+            print("Invalid option. Please enter 1 or 2.")
+            return
+
+        # Collect new details from the user
+        first_name = input("New first name (leave empty to skip): ").strip() or None
+        last_name = input("New last name (leave empty to skip): ").strip() or None
+        email = input("New email (leave empty to skip): ").strip() or None
+        address = input("New address (leave empty to skip): ").strip() or None
+
+        # Collect all updated fields
+        updated_fields = {k: v for k, v in
+                          {'first_name': first_name, 'last_name': last_name, 'email': email, 'address': address}.items() if v}
+
+        if update_choice == '1':
+            # Call the update method by phone number
+            self.contacts.update_contact_by_phone(phone, **updated_fields)
+            print(f"Contact with phone {phone} updated successfully.")
+            app_logger.info(f"Updated contact with phone: {phone}, Changes: {updated_fields}")
+        elif update_choice == '2':
+            # Call the update method by contact ID
+            self.contacts.update_contact_by_id(contact_id, **updated_fields)
+            print(f"Contact with ID {contact_id} updated successfully.")
+            app_logger.info(f"Updated contact with ID: {contact_id}, Changes: {updated_fields}")
+
+    @error_reporter
+    def display_summary(self):
+        """Display a summary of the contacts in the phone book."""
+        total_contacts = self.contacts.count_contacts()
+        print("\n--- Phone Book Summary ---")
+        print(f"Total Contacts: {total_contacts}")
+
+        if total_contacts > 0:
+            print("Here are a few of your contacts:")
+            # Display the first 3 contacts as a summary
+            contacts = self.contacts.get_all_contacts(limit=3)
+            for idx, contact in enumerate(contacts, start=1):
+                print(f"{idx}. {contact['first_name']} {contact['last_name']}, Phone: {contact['phone']}")
+        else:
+            print("No contacts found in the phone book.")
+        print("---------------------------")

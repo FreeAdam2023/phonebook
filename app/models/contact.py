@@ -57,3 +57,13 @@ class Contacts(CrudOperations):
         """
         query = f"SELECT * FROM {self.table} WHERE phone = ?"
         return self.fetchone(query, (phone,))  # Use `fetchone` to return a single record if found
+
+    @error_reporter
+    def update_contact_by_phone(self, phone, **fields):
+        """Update contact by phone number."""
+        self.update({'phone': phone}, **fields)
+
+    @error_reporter
+    def update_contact_by_id(self, contact_id, **fields):
+        """Update contact by contact ID."""
+        self.update({'id': contact_id}, **fields)
