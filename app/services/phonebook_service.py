@@ -214,16 +214,15 @@ class PhoneBookService:
         print("-" * 40)  # Separator for visual clarity
 
     @error_reporter
-    def handle_add_contact(self, service):
+    def handle_add_contact(self):
         """Handle adding a new contact."""
         first_name = input("First name: ").strip()
         last_name = input("Last name: ").strip()
         phone = input("Phone number: ").strip()
         email = input("Email (optional): ").strip() or None
         address = input("Address (optional): ").strip() or None
-        service.add_contact(first_name, last_name, phone, email, address)
+        self.add_contact(first_name, last_name, phone, email, address)
         print("Contact added successfully.")
-
         # Log the addition of the contact
         app_logger.info(f"Added contact: {first_name} {last_name}, Phone: {phone}")
 
@@ -249,9 +248,9 @@ class PhoneBookService:
             table_data = []
             headers = ["#", "First Name", "Last Name", "Phone", "Email", "Address"]
 
-            for idx, contact in enumerate(contacts, start=1 + offset):
+            for contact in contacts:
                 table_data.append([
-                    idx,
+                    contact.get('id', 'N/A'),
                     contact.get('first_name', 'N/A'),
                     contact.get('last_name', 'N/A'),
                     contact.get('phone', 'N/A'),
@@ -289,8 +288,8 @@ class PhoneBookService:
         search_term = input("Enter search term (name or phone): ").strip()
         results = self.search_contact(search_term)
         if results:
-            for idx, contact in enumerate(results, start=1):
-                print(f"{idx}. {contact['first_name']} {contact['last_name']}, Phone: {contact['phone']}")
+            for contact in results:
+                print(f"{contact['id']}. {contact['first_name']} {contact['last_name']}, Phone: {contact['phone']}")
             app_logger.info(f"Search results for: {search_term}, Found {len(results)} contacts.")
         else:
             print("No matching contacts found.")
@@ -308,9 +307,11 @@ class PhoneBookService:
             if not phone:
                 print("Phone number is required to delete contact.")
                 return
+            delete_info = self.contacts.find_by_phone(phone)
             self.delete_contact(phone=phone)
-            print(f"Contact with phone {phone} deleted successfully.")
-            app_logger.info(f"Deleted contact with phone: {phone}")
+            print(f"Contact with info {delete_info['id']}. {delete_info['first_name']} {delete_info['last_name']}, "
+                  f"Phone: {delete_info['phone']} deleted successfully.")
+            app_logger.info(f"Deleted contact with phone: {phone}, info: {delete_info}")
 
         elif delete_choice == '2':
             # Delete by contact ID
@@ -319,10 +320,11 @@ class PhoneBookService:
             except ValueError:
                 print("Invalid contact ID. Please enter a valid number.")
                 return
+            delete_info = self.contacts.fetch_one(**{'id': contact_id})
             self.contacts.delete(**{'id': contact_id})
-            print(f"Contact with ID {contact_id} deleted successfully.")
-            app_logger.info(f"Deleted contact with ID: {contact_id}")
-
+            print(f"Contact with info {delete_info['id']}. {delete_info['first_name']} {delete_info['last_name']}, "
+                  f"Phone: {delete_info['phone']} deleted successfully.")
+            app_logger.info(f"Deleted contact with ID: {contact_id}, info: {delete_info}")
         else:
             print("Invalid option. Please enter 1 or 2.")
             return
@@ -382,8 +384,8 @@ class PhoneBookService:
             print("Here are a few of your contacts:")
             # Display the first 3 contacts as a summary
             contacts = self.contacts.get_all_contacts(limit=3)
-            for idx, contact in enumerate(contacts, start=1):
-                print(f"{idx}. {contact['first_name']} {contact['last_name']}, Phone: {contact['phone']}")
+            for contact in contacts:
+                print(f"{contact['id']}. {contact['first_name']} {contact['last_name']}, Phone: {contact['phone']}")
         else:
             print("No contacts found in the phone book.")
         print("---------------------------")
