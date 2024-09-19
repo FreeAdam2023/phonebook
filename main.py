@@ -1,5 +1,4 @@
 from app.services.phonebook_service import PhoneBookService
-from tabulate import tabulate  # Import the tabulate library for table formatting
 from utils.utils import error_reporter
 from utils.logger import setup_logger
 

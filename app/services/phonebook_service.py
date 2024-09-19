@@ -298,14 +298,34 @@ class PhoneBookService:
 
     @error_reporter
     def handle_delete_contact(self):
-        """Handle deleting a contact by phone number."""
-        phone = input("Enter phone number of the contact to delete: ").strip()
-        self.delete_contact(phone)
-        print("Contact deleted successfully.")
+        """Handle deleting a contact by phone number or contact ID."""
+        print("Delete Contact: You can delete by phone number or contact ID (number).")
+        delete_choice = input("Would you like to delete by (1) Phone number or (2) Contact ID? Enter 1 or 2: ").strip()
 
-        # Log the deletion
-        app_logger.info(f"Deleted contact with phone: {phone}")
+        if delete_choice == '1':
+            # Delete by phone number
+            phone = input("Enter phone number of the contact to delete: ").strip()
+            if not phone:
+                print("Phone number is required to delete contact.")
+                return
+            self.delete_contact(phone=phone)
+            print(f"Contact with phone {phone} deleted successfully.")
+            app_logger.info(f"Deleted contact with phone: {phone}")
 
+        elif delete_choice == '2':
+            # Delete by contact ID
+            try:
+                contact_id = int(input("Enter the contact ID to delete: ").strip())
+            except ValueError:
+                print("Invalid contact ID. Please enter a valid number.")
+                return
+            self.contacts.delete(**{'id': contact_id})
+            print(f"Contact with ID {contact_id} deleted successfully.")
+            app_logger.info(f"Deleted contact with ID: {contact_id}")
+
+        else:
+            print("Invalid option. Please enter 1 or 2.")
+            return
 
     @error_reporter
     def handle_update_contact(self):
