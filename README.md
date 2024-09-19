@@ -1,6 +1,5 @@
 1. install requirements.txt
 
-
 python3 -m venv venv
 
 MACOS:

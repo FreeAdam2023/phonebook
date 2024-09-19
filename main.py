@@ -6,14 +6,6 @@ from utils.logger import setup_logger
 app_logger = setup_logger('app_logger', 'logs/app.log')
 audit_logger = setup_logger('audit_logger', 'logs/audit.log')
 
-from app.services.phonebook_service import PhoneBookService
-from utils.utils import error_reporter
-from utils.logger import setup_logger
-
-# Setup loggers
-app_logger = setup_logger('app_logger', 'logs/app.log')
-audit_logger = setup_logger('audit_logger', 'logs/audit.log')
-
 @error_reporter
 def main_menu():
     """Display the main menu and prompt user for an option."""
